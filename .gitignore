@@ -1,0 +1,13 @@
+.env
+/credentials.json
+/temp_photos/*
+!/temp_photos/.gitkeep
+/feedback_bot.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.venv
+venv/
+.idea
