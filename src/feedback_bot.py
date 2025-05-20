@@ -111,7 +111,7 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return RATING
 
         context.user_data["rating"] = rating
-        await update.message.reply_text("📝 Напишите комментарий (или /skip чтобы пропустить):")
+        await update.message.reply_text("📝 Напишите комментарий (или /skip чтобы пропустить). Вы можете прикрепить до 10 скринов к сообщению:")
         return COMMENT
     except Exception as e:
         logger.error(f"Ошибка в handle_rating: {e}")
@@ -126,35 +126,33 @@ async def handle_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["comment_text"] = comment_text
 
         if update.message.photo:
-            photo = update.message.photo[-1]
-            file = await photo.get_file()
+            if "photo_urls" not in context.user_data:
+                context.user_data["photo_urls"] = []
 
-            os.makedirs(os.path.join("../temp_photos"), exist_ok=True)
-            file_path = os.path.join("../temp_photos",
-                                     f"photo_{update.message.from_user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg")
-            await file.download_to_drive(file_path)
+            for photo in update.message.photo:
+                if len(context.user_data["photo_urls"]) >= 10:
+                    await update.message.reply_text("ℹ️ Достигнут лимит в 10 фотографий. Остальные фотографии не будут сохранены.")
+                    break
 
-            file_name = f"Feedback_Photo_{update.message.from_user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
-            photo_url = upload_to_drive(file_path, file_name)
+                file = await photo.get_file()
 
-            os.remove(file_path)
+                os.makedirs(os.path.join("../temp_photos"), exist_ok=True)
+                file_path = os.path.join("../temp_photos",
+                                         f"photo_{update.message.from_user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg")
+                await file.download_to_drive(file_path)
 
-            context.user_data["photo_url"] = photo_url
+                file_name = f"Feedback_Photo_{update.message.from_user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
+                photo_url = upload_to_drive(file_path, file_name)
 
-        if "comment_text" not in context.user_data and "photo_url" not in context.user_data:
+                os.remove(file_path)
+
+                context.user_data["photo_urls"].append(photo_url)
+
+        if "comment_text" not in context.user_data and "photo_urls" not in context.user_data:
             await update.message.reply_text("ℹ️ Пожалуйста, отправьте текст или фото")
             return COMMENT
 
-        has_text = update.message.text or update.message.caption
-        has_photo = update.message.photo
-
-        if has_text and not has_photo:
-            return await finalize_feedback(update, context)
-
-        if has_photo and not has_text:
-            return await finalize_feedback(update, context)
-
-        if has_photo and has_text:
+        if update.message.text or update.message.caption or update.message.photo:
             return await finalize_feedback(update, context)
 
     except Exception as e:
@@ -163,15 +161,15 @@ async def handle_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def finalize_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     try:
         comment_parts = []
 
         if "comment_text" in context.user_data:
             comment_parts.append(f"{context.user_data['comment_text']}")
 
-        if "photo_url" in context.user_data:
-            comment_parts.append(f"{context.user_data['photo_url']}")
+        if "photo_urls" in context.user_data and context.user_data["photo_urls"]:
+            for i, url in enumerate(context.user_data["photo_urls"], 1):
+                comment_parts.append(f"{i}. {url}")
 
         full_comment = "\n".join(comment_parts) if comment_parts else "Нет комментария"
 
